@@ -45,11 +45,19 @@ module.exports = {
               fs.mkdirSync(dest, { recursive: true });
             }
             fs.readdirSync(src).forEach((childItemName) => {
+              // Skip .env files - they should not be packaged
+              if (childItemName === ".env") {
+                return;
+              }
               const srcPath = path.join(src, childItemName);
               const destPath = path.join(dest, childItemName);
               copyRecursiveSync(srcPath, destPath);
             });
           } else {
+            // Skip .env files
+            if (path.basename(src) === ".env") {
+              return;
+            }
             fs.copyFileSync(src, dest);
           }
         };
@@ -59,6 +67,13 @@ module.exports = {
         }
 
         copyRecursiveSync(backendSource, backendDest);
+        
+        // Create a default .env file template (without API key)
+        const envTemplatePath = path.join(backendDest, ".env");
+        if (!fs.existsSync(envTemplatePath)) {
+          fs.writeFileSync(envTemplatePath, "GEMINI_API_KEY=\n", "utf8");
+          console.log("✓ Created .env template file (empty API key)");
+        }
 
         const nodeModulesPath = path.join(backendDest, "node_modules");
         if (fs.existsSync(nodeModulesPath)) {
@@ -137,11 +152,19 @@ module.exports = {
                 fs.mkdirSync(dest, { recursive: true });
               }
               fs.readdirSync(src).forEach((childItemName) => {
+                // Skip .env files - they should not be packaged
+                if (childItemName === ".env") {
+                  return;
+                }
                 const srcPath = path.join(src, childItemName);
                 const destPath = path.join(dest, childItemName);
                 copyRecursiveSync(srcPath, destPath);
               });
             } else {
+              // Skip .env files
+              if (path.basename(src) === ".env") {
+                return;
+              }
               fs.copyFileSync(src, dest);
             }
           };
@@ -151,6 +174,13 @@ module.exports = {
           }
 
           copyRecursiveSync(backendSource, backendDest);
+          
+          // Create a default .env file template (without API key)
+          const envTemplatePath = path.join(backendDest, ".env");
+          if (!fs.existsSync(envTemplatePath)) {
+            fs.writeFileSync(envTemplatePath, "GEMINI_API_KEY=\n", "utf8");
+            console.log("✓ Created .env template file (empty API key)");
+          }
         }
       }
     },

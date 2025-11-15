@@ -23,11 +23,10 @@ Navi is a desktop AI assistant that helps you work faster and smarter on Windows
 - **💻 System Commands** - Quick access to system functions (restart, shutdown, sleep, lock)
 - **📁 File & Folder Navigation** - Open files and folders with intelligent path detection
 - **🌐 Web Search** - Search the web directly from Navi
-- **🔢 Calculator** - Quick calculations without leaving your workflow
 - **📝 Recent Files** - Quick access to recently opened files and folders
 - **🔗 URL Launcher** - Open URLs in your default browser
 - **⚙️ Project Management** - Configure and launch development projects with custom commands
-- **🎨 Window Management** - Resize and manage windows with ease
+- **🎨 Window Modes** - Switch between minimal and full screen modes with smooth animations
 
 ### Smart Features
 
@@ -55,13 +54,19 @@ Navi is a desktop AI assistant that helps you work faster and smarter on Windows
    - Create a new API key
    - Copy the key
 
-2. **Configure Navi**:
-   - Open Navi (press `Alt+Space`)
-   - Click the settings icon (⚙️) or type "settings"
-   - Enter your Gemini API key in the settings
-   - Click "Save"
+2. **Configure the API Key**:
+   - Navigate to the Navi installation directory
+   - Go to the `backend` folder
+   - Open the `.env` file (it should already exist with `GEMINI_API_KEY=`)
+   - Add your API key after the equals sign:
+     ```
+     GEMINI_API_KEY=your_actual_api_key_here
+     ```
+   - Save the file
 
-3. **You're ready!** Start using Navi with natural language commands.
+3. **Restart Navi** if it's already running
+
+4. **You're ready!** Start using Navi with natural language commands.
 
 ---
 
@@ -71,27 +76,23 @@ Navi is a desktop AI assistant that helps you work faster and smarter on Windows
 
 - **Open an app**: Type the app name (e.g., "chrome", "code", "notepad")
 - **Open a file/folder**: Type the path (e.g., "C:\Users\YourName\Documents")
-- **Calculate**: Type a math expression (e.g., "2 + 2", "15 * 3.5")
 - **Search the web**: Type "search" followed by your query
 - **System commands**: Type "restart", "shutdown", "sleep", or "lock"
 - **Open URL**: Type a URL (e.g., "https://github.com")
 
 ### AI Commands
 
-Ask Navi to do complex tasks using natural language:
+Ask Navi to do complex tasks using natural language. **All AI commands must be prefaced with `/chat`**:
 
-- "Open my dev environment for my React project"
-- "Search for Electron best practices"
-- "Open VS Code in my Documents folder"
-- "Calculate the tip for a $50 bill at 20%"
+- `/chat Open my dev environment for my React project`
+- `/chat Search for Electron best practices`
+- `/chat Open VS Code in my Documents folder`
 
 ### Keyboard Shortcuts
 
 - **`Alt+Space`** - Show/hide Navi
 - **`Enter`** - Execute selected suggestion
 - **`↑` / `↓`** - Navigate suggestions
-- **`Esc`** - Close Navi
-- **`Tab`** - Switch between minimal and full mode
 
 ### Window Modes
 
@@ -113,12 +114,14 @@ Switch modes by clicking the expand icon or using the settings.
 ### Setup
 
 1. **Clone the repository**:
+
    ```bash
    git clone https://github.com/yourusername/navi.git
    cd navi
    ```
 
 2. **Install dependencies**:
+
    ```bash
    npm install
    cd backend
@@ -134,6 +137,7 @@ Switch modes by clicking the expand icon or using the settings.
    - Get your API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
 
 4. **Run in development mode**:
+
    ```bash
    npm run electron:dev
    ```
@@ -146,15 +150,15 @@ Switch modes by clicking the expand icon or using the settings.
 
 ### Development Scripts
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start Vite dev server only |
-| `npm run electron:dev` | Start dev server + Electron (recommended) |
-| `npm run build` | Build React app only |
-| `npm run build:electron` | Build Electron main process + React app |
-| `npm start` | Run built Electron app |
-| `npm run package` | Package the app (no installer) |
-| `npm run make` | Create distributable installers |
+| Command                  | Description                               |
+| ------------------------ | ----------------------------------------- |
+| `npm run dev`            | Start Vite dev server only                |
+| `npm run electron:dev`   | Start dev server + Electron (recommended) |
+| `npm run build`          | Build React app only                      |
+| `npm run build:electron` | Build Electron main process + React app   |
+| `npm start`              | Run built Electron app                    |
+| `npm run package`        | Package the app (no installer)            |
+| `npm run make`           | Create distributable installers           |
 
 ### Project Structure
 
@@ -192,6 +196,7 @@ npm run make
 ```
 
 This will create platform-specific installers in the `out/make/` directory:
+
 - **Windows**: `navi-1.0.0 Setup.exe` (Squirrel installer)
 - **macOS**: `.zip` file
 - **Linux**: `.deb` and `.rpm` packages
@@ -211,7 +216,7 @@ The app uses [Electron Forge](https://www.electronforge.io/) for packaging. Conf
 Access settings by clicking the ⚙️ icon or typing "settings" in Navi.
 
 **Available Settings**:
-- **Gemini API Key** - Your Google Gemini API key (required for AI features)
+
 - **Default IDE** - Preferred code editor (e.g., "code" for VS Code)
 - **Default Port** - Default port for development servers
 - **Projects** - Configure project shortcuts with:
@@ -220,18 +225,21 @@ Access settings by clicking the ⚙️ icon or typing "settings" in Navi.
   - Start command (e.g., "npm run dev")
   - Port (optional)
 
+**Note**: The Gemini API key is configured via the `.env` file in the `backend` directory (see [First-Time Setup](#first-time-setup) above).
+
 ### Project Configuration Example
 
 Add a project in Settings:
 
 ```
-Nickname: wotc
-File Path: C:\Users\YourName\Projects\wotc
+Nickname: example_nickname
+File Path: C:\Users\YourName\Projects\example_nickname
 Start Command: npm run dev
 Port: 5173
 ```
 
-Then you can say: "Open my dev environment for wotc" and Navi will:
+Then you can say: `/chat Open my dev environment for example_nickname` and Navi will:
+
 1. Open a terminal in the project directory
 2. Run the start command
 3. Open the browser to the correct port
@@ -251,9 +259,10 @@ If you see "Backend server is not responding":
    - Look for error messages in the console
 
 2. **Verify API key**:
-   - Open Settings
-   - Ensure your Gemini API key is correctly entered
-   - Save and restart Navi
+   - Check that the `.env` file exists in the `backend` directory
+   - Ensure the file contains: `GEMINI_API_KEY=your_actual_key_here`
+   - Make sure there are no extra spaces or quotes around the key
+   - Restart Navi after making changes
 
 3. **Check port 3000**:
    - Ensure port 3000 is not in use by another application
@@ -288,14 +297,6 @@ See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for detailed development troubles
 
 ---
 
-## 📝 License
-
-ISC License
-
-Copyright (c) 2024 Klaus Chamberlain
-
----
-
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
@@ -310,7 +311,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## 🙏 Acknowledgments
 
-- Inspired by the helpful fairy Navi from *The Legend of Zelda: Ocarina of Time*
+- Inspired by the helpful fairy Navi from _The Legend of Zelda: Ocarina of Time_
 - Built with [Electron](https://www.electronjs.org/) and [Electron Forge](https://www.electronforge.io/)
 - Powered by [Google Gemini AI](https://deepmind.google/technologies/gemini/)
 
@@ -319,6 +320,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## 📧 Support
 
 For issues, questions, or suggestions:
+
 - Open an issue on [GitHub](../../issues)
 - Check the [Troubleshooting Guide](./TROUBLESHOOTING.md)
 
@@ -328,6 +330,6 @@ For issues, questions, or suggestions:
 
 **Made with ❤️ by Klaus Chamberlain**
 
-*"Hey! Listen!"* - Navi
+_"Hey! Listen!"_ - Navi
 
 </div>
