@@ -66,7 +66,7 @@ Navi is a desktop AI assistant that helps you work faster and smarter on Windows
 
 3. **Restart Navi** if it's already running
 
-4. **You're ready!** Start using Navi with natural language commands.
+4. **You're ready!** Start using Navi with natural language commands. *(Important: As of 1.0.0, this is necessary to perform system functions like sleep, lock, etc)*
 
 ---
 
