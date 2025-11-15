@@ -1,0 +1,5 @@
+node_modules
+.env
+temp_get_apps.ps1
+*.log
+
