@@ -288,9 +288,9 @@ See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for detailed development troubles
 
 ## 🛠️ Technology Stack
 
-- **Frontend**: React 18, TypeScript, Vite
-- **Desktop**: Electron 35
-- **Backend**: Express 5, Node.js
+- **Frontend**: React, TypeScript, Vite
+- **Desktop**: Electron 
+- **Backend**: Express, Node.js
 - **AI**: Google Gemini AI
 - **Packaging**: Electron Forge
 - **Styling**: CSS3 with modern features
