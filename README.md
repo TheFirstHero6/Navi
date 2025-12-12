@@ -20,6 +20,7 @@ Navi is a desktop AI assistant that helps you work faster and smarter on Windows
 
 - **🤖 AI-Powered Commands** - Natural language processing powered by Google Gemini AI
 - **🚀 App Launcher** - Instantly search and launch any installed Windows application
+- **🔄 App Switcher** - Quickly switch between running applications with `sw` command
 - **💻 System Commands** - Quick access to system functions (restart, shutdown, sleep, lock)
 - **📁 File & Folder Navigation** - Open files and folders with intelligent path detection
 - **🌐 Web Search** - Search the web directly from Navi
@@ -66,7 +67,7 @@ Navi is a desktop AI assistant that helps you work faster and smarter on Windows
 
 3. **Restart Navi** if it's already running
 
-4. **You're ready!** Start using Navi with natural language commands. *(Important: As of 1.0.0, this is necessary to perform system functions like sleep, lock, etc)*
+4. **You're ready!** Start using Navi with natural language commands. _(Important: As of 1.0.0, this is necessary to perform system functions like sleep, lock, etc)_
 
 ---
 
@@ -75,6 +76,11 @@ Navi is a desktop AI assistant that helps you work faster and smarter on Windows
 ### Basic Commands
 
 - **Open an app**: Type the app name (e.g., "chrome", "code", "notepad")
+- **Switch to running app**: Type `sw` followed by the app name (e.g., "sw chrome", "sw code")
+  - Shows all running apps instantly with zero delay
+  - Filters in real-time as you type for fast switching
+  - Also accepts "switch" or "focus" as aliases
+  - Window hides immediately when you press Enter
 - **Open a file/folder**: Type the path (e.g., "C:\Users\YourName\Documents")
 - **Search the web**: Type "search" followed by your query
 - **System commands**: Type "restart", "shutdown", "sleep", or "lock"
@@ -289,7 +295,7 @@ See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for detailed development troubles
 ## 🛠️ Technology Stack
 
 - **Frontend**: React, TypeScript, Vite
-- **Desktop**: Electron 
+- **Desktop**: Electron
 - **Backend**: Express, Node.js
 - **AI**: Google Gemini AI
 - **Packaging**: Electron Forge
