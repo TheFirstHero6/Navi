@@ -311,7 +311,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## 🙏 Acknowledgments
 
-- Inspired by the helpful fairy Navi from _The Legend of Zelda: Ocarina of Time_
+- Inspired by the memorable fairy Navi from _The Legend of Zelda: Ocarina of Time_
 - Built with [Electron](https://www.electronjs.org/) and [Electron Forge](https://www.electronforge.io/)
 - Powered by [Google Gemini AI](https://deepmind.google/technologies/gemini/)
 

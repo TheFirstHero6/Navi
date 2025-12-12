@@ -1,48 +1,31 @@
-import { app, BrowserWindow, ipcMain, globalShortcut } from "electron";
-import type { BrowserWindow as BrowserWindowType } from "electron";
-import path from "path";
-import { spawn, ChildProcess } from "child_process";
-import http from "http";
-import fs from "fs";
-
+"use strict";
+const electron = require("electron");
+const path = require("path");
+const child_process = require("child_process");
+const http = require("http");
+const fs = require("fs");
 const appDir = __dirname;
-
-let backendProcess: ChildProcess | null = null;
-let mainWindow: BrowserWindowType | null = null;
+let backendProcess = null;
+let mainWindow = null;
 let isMinimalMode = true;
 let wasMinimizedFromFullMode = false;
-const animateWindowResize = (
-  mainWindow: BrowserWindowType,
-  targetWidth: number,
-  targetHeight: number,
-  targetX?: number,
-  targetY?: number
-) => {
-  if (!mainWindow) return;
-
-  const currentBounds = mainWindow.getBounds();
+const animateWindowResize = (mainWindow2, targetWidth, targetHeight, targetX, targetY) => {
+  if (!mainWindow2) return;
+  const currentBounds = mainWindow2.getBounds();
   const startWidth = currentBounds.width;
   const startHeight = currentBounds.height;
   const startX = currentBounds.x;
   const startY = currentBounds.y;
-
-  const finalX = targetX !== undefined ? targetX : startX;
-  const finalY = targetY !== undefined ? targetY : startY;
-
+  const finalX = targetX !== void 0 ? targetX : startX;
+  const finalY = targetY !== void 0 ? targetY : startY;
   const duration = 300;
   const steps = 30;
   const stepDuration = duration / steps;
   let currentStep = 0;
-
   const animate = () => {
-    if (!mainWindow || currentStep > steps) return;
-
+    if (!mainWindow2 || currentStep > steps) return;
     const progress = currentStep / steps;
-    const eased =
-      progress < 0.5
-        ? 2 * progress * progress
-        : 1 - Math.pow(-2 * progress + 2, 2) / 2;
-
+    const eased = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
     const currentWidth = Math.round(
       startWidth + (targetWidth - startWidth) * eased
     );
@@ -51,33 +34,28 @@ const animateWindowResize = (
     );
     const currentX = Math.round(startX + (finalX - startX) * eased);
     const currentY = Math.round(startY + (finalY - startY) * eased);
-
-    mainWindow.setBounds({
+    mainWindow2.setBounds({
       x: currentX,
       y: currentY,
       width: currentWidth,
-      height: currentHeight,
+      height: currentHeight
     });
-
     currentStep++;
     if (currentStep <= steps) {
       setTimeout(animate, stepDuration);
     }
   };
-
   animate();
 };
-
-function checkBackendHealth(port: number = 3000): Promise<boolean> {
+function checkBackendHealth(port = 3e3) {
   return new Promise((resolve) => {
     const req = http.get(
       `http://localhost:${port}/health`,
-      { timeout: 2000 },
+      { timeout: 2e3 },
       (res) => {
         resolve(res.statusCode === 200);
       }
     );
-
     req.on("error", () => resolve(false));
     req.on("timeout", () => {
       req.destroy();
@@ -85,31 +63,26 @@ function checkBackendHealth(port: number = 3000): Promise<boolean> {
     });
   });
 }
-
-function findVitePort(): Promise<number> {
+function findVitePort() {
   return new Promise((resolve) => {
     const ports = [5173, 5174, 5175];
     let currentIndex = 0;
-
-    const tryPort = (port: number) => {
-      const req = http.get(`http://localhost:${port}`, { timeout: 1000 }, (res) => {
+    const tryPort = (port) => {
+      const req = http.get(`http://localhost:${port}`, { timeout: 1e3 }, (res) => {
         if (res.statusCode === 200 || res.statusCode === 304) {
           resolve(port);
         } else {
           tryNextPort();
         }
       });
-
       req.on("error", () => {
         tryNextPort();
       });
-
       req.on("timeout", () => {
         req.destroy();
         tryNextPort();
       });
     };
-
     const tryNextPort = () => {
       currentIndex++;
       if (currentIndex < ports.length) {
@@ -118,31 +91,26 @@ function findVitePort(): Promise<number> {
         resolve(5173);
       }
     };
-
     tryPort(ports[0]);
   });
 }
-
-// Additional safety check (redundant but kept for clarity)
-if (!app) {
+if (!electron.app) {
   console.error("ERROR: Electron 'app' module is undefined after destructuring!");
   process.exit(1);
 }
-
 try {
   if (require("electron-squirrel-startup")) {
-    app.quit();
+    electron.app.quit();
     process.exit(0);
   }
-} catch (e) {}
-
-const gotTheLock = app.requestSingleInstanceLock();
-
+} catch (e) {
+}
+const gotTheLock = electron.app.requestSingleInstanceLock();
 if (!gotTheLock) {
-  app.quit();
+  electron.app.quit();
   process.exit(0);
 } else {
-  app.on("second-instance", () => {
+  electron.app.on("second-instance", () => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
@@ -150,23 +118,20 @@ if (!gotTheLock) {
     }
   });
 }
-
 process.on("uncaughtException", (error) => {
   console.error("=== UNCAUGHT EXCEPTION ===");
   console.error("Error:", error);
   console.error("Stack:", error.stack);
 });
-
 process.on("unhandledRejection", (reason, promise) => {
   console.error("=== UNHANDLED REJECTION ===");
   console.error("Reason:", reason);
   console.error("Promise:", promise);
 });
-
 const createWindow = () => {
   try {
-    let iconPath: string | undefined;
-    if (process.env.NODE_ENV === "development" || !app.isPackaged) {
+    let iconPath;
+    if (process.env.NODE_ENV === "development" || !electron.app.isPackaged) {
       const devIconIco = path.join(appDir, "..", "src", "assets", "icon.ico");
       const devIconPng = path.join(appDir, "..", "src", "assets", "logo.png");
       if (fs.existsSync(devIconIco)) {
@@ -182,8 +147,8 @@ const createWindow = () => {
       } else if (fs.existsSync(packagedIconPng)) {
         iconPath = packagedIconPng;
       } else {
-        const fallbackIconIco = path.join(app.getAppPath(), "src", "assets", "icon.ico");
-        const fallbackIconPng = path.join(app.getAppPath(), "src", "assets", "logo.png");
+        const fallbackIconIco = path.join(electron.app.getAppPath(), "src", "assets", "icon.ico");
+        const fallbackIconPng = path.join(electron.app.getAppPath(), "src", "assets", "logo.png");
         if (fs.existsSync(fallbackIconIco)) {
           iconPath = fallbackIconIco;
         } else if (fs.existsSync(fallbackIconPng)) {
@@ -191,7 +156,7 @@ const createWindow = () => {
         }
       }
     }
-    mainWindow = new BrowserWindow({
+    mainWindow = new electron.BrowserWindow({
       width: 600,
       height: 64,
       minWidth: 400,
@@ -201,7 +166,7 @@ const createWindow = () => {
       webPreferences: {
         preload: path.join(appDir, "preload.js"),
         nodeIntegration: false,
-        contextIsolation: true,
+        contextIsolation: true
       },
       backgroundColor: "#00000000",
       frame: false,
@@ -211,32 +176,29 @@ const createWindow = () => {
       skipTaskbar: false,
       transparent: true,
       show: false,
-      hasShadow: false,
+      hasShadow: false
     });
-
-    if (process.env.NODE_ENV === "development" || !app.isPackaged) {
-      findVitePort()
-        .then((port) => {
-          if (mainWindow) {
-            mainWindow.loadURL(`http://localhost:${port}`);
-          }
-        })
-        .catch((err) => {
-          console.error("Failed to detect Vite port, using default 5173:", err);
-          if (mainWindow) {
-            mainWindow.loadURL("http://localhost:5173");
-          }
-        });
+    if (process.env.NODE_ENV === "development" || !electron.app.isPackaged) {
+      findVitePort().then((port) => {
+        if (mainWindow) {
+          mainWindow.loadURL(`http://localhost:${port}`);
+        }
+      }).catch((err) => {
+        console.error("Failed to detect Vite port, using default 5173:", err);
+        if (mainWindow) {
+          mainWindow.loadURL("http://localhost:5173");
+        }
+      });
       if (mainWindow) {
         mainWindow.webContents.openDevTools();
-        mainWindow.webContents.on("did-frame-finish-load", () => {});
+        mainWindow.webContents.on("did-frame-finish-load", () => {
+        });
       }
     } else {
-      const distPath = path.join(app.getAppPath(), "dist", "index.html");
-
+      const distPath = path.join(electron.app.getAppPath(), "dist", "index.html");
       if (!fs.existsSync(distPath)) {
         console.error(`ERROR: HTML file not found at: ${distPath}`);
-        const distDir = path.join(app.getAppPath(), "dist");
+        const distDir = path.join(electron.app.getAppPath(), "dist");
         console.error(`Dist directory exists: ${fs.existsSync(distDir)}`);
         if (fs.existsSync(distDir)) {
           try {
@@ -248,10 +210,9 @@ const createWindow = () => {
         }
         mainWindow.show();
       }
-
       mainWindow.webContents.on(
         "did-fail-load",
-        (event: any, errorCode: number, errorDescription: string, validatedURL: string) => {
+        (event, errorCode, errorDescription, validatedURL) => {
           console.error(`Failed to load: ${validatedURL}`);
           console.error(
             `Error code: ${errorCode}, Description: ${errorDescription}`
@@ -261,20 +222,17 @@ const createWindow = () => {
           }
         }
       );
-
-      mainWindow.webContents.on("render-process-gone", (event: any, details: any) => {
+      mainWindow.webContents.on("render-process-gone", (event, details) => {
         console.error("Renderer process gone:", details);
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.show();
         }
       });
-
       mainWindow.on("unresponsive", () => {
         console.error("=== Window became unresponsive ===");
       });
-
       try {
-        mainWindow.loadFile(distPath).catch((error: any) => {
+        mainWindow.loadFile(distPath).catch((error) => {
           console.error("=== Error loading HTML file ===");
           console.error("Error:", error);
           console.error(`Attempted path: ${distPath}`);
@@ -289,13 +247,11 @@ const createWindow = () => {
         }
       }
     }
-
     mainWindow.on("minimize", () => {
       if (!isMinimalMode) {
         wasMinimizedFromFullMode = true;
       }
     });
-
     mainWindow.on("show", () => {
       setTimeout(() => {
         if (wasMinimizedFromFullMode && mainWindow) {
@@ -304,7 +260,6 @@ const createWindow = () => {
           mainWindow.setResizable(false);
           mainWindow.setMinimumSize(400, 64);
           mainWindow.setMaximumSize(800, 64);
-
           const { screen } = require("electron");
           const primaryDisplay = screen.getPrimaryDisplay();
           const { width, height } = primaryDisplay.workAreaSize;
@@ -312,7 +267,6 @@ const createWindow = () => {
           const targetHeight = 64;
           const targetX = Math.floor((width - targetWidth) / 2);
           const targetY = Math.floor(height * 0.1);
-
           animateWindowResize(
             mainWindow,
             targetWidth,
@@ -324,14 +278,12 @@ const createWindow = () => {
         }
       }, 50);
     });
-
-    ipcMain.handle("window-minimize", () => {
+    electron.ipcMain.handle("window-minimize", () => {
       if (mainWindow) {
         mainWindow.minimize();
       }
     });
-
-    ipcMain.handle("window-maximize", () => {
+    electron.ipcMain.handle("window-maximize", () => {
       if (mainWindow) {
         if (mainWindow.isMaximized()) {
           mainWindow.unmaximize();
@@ -340,13 +292,11 @@ const createWindow = () => {
         }
       }
     });
-
-    ipcMain.handle("window-close", () => {
+    electron.ipcMain.handle("window-close", () => {
       if (mainWindow) {
         mainWindow.close();
       }
     });
-
     if (mainWindow) {
       mainWindow.once("ready-to-show", () => {
         centerWindow();
@@ -355,49 +305,42 @@ const createWindow = () => {
           mainWindow.focus();
         }
       });
-
       mainWindow.webContents.once("did-finish-load", () => {
         if (mainWindow && !mainWindow.isVisible()) {
           mainWindow.show();
           mainWindow.focus();
         }
       });
-
       mainWindow.on("blur", () => {
         if (mainWindow) {
           mainWindow.setBackgroundColor("#00000000");
-          mainWindow.webContents
-            .executeJavaScript(
-              `
+          mainWindow.webContents.executeJavaScript(
+            `
         document.body.style.backgroundColor = 'transparent';
         document.documentElement.style.backgroundColor = 'transparent';
         const root = document.getElementById('root');
         if (root) root.style.backgroundColor = 'transparent';
       `
-            )
-            .catch(() => {});
+          ).catch(() => {
+          });
         }
       });
-
       mainWindow.on("focus", () => {
         if (mainWindow) {
           mainWindow.setBackgroundColor("#00000000");
         }
       });
-
       mainWindow.on("show", () => {
         if (mainWindow) {
           mainWindow.setBackgroundColor("#00000000");
         }
       });
     }
-
     const centerWindow = () => {
       if (!mainWindow) return;
       const { screen } = require("electron");
       const primaryDisplay = screen.getPrimaryDisplay();
       const { width, height } = primaryDisplay.workAreaSize;
-
       if (isMinimalMode) {
         const windowWidth = 600;
         const windowHeight = 64;
@@ -405,7 +348,7 @@ const createWindow = () => {
           x: Math.floor((width - windowWidth) / 2),
           y: Math.floor(height * 0.1),
           width: windowWidth,
-          height: windowHeight,
+          height: windowHeight
         });
       } else {
         const windowWidth = 1200;
@@ -414,22 +357,18 @@ const createWindow = () => {
           x: Math.floor((width - windowWidth) / 2),
           y: Math.floor((height - windowHeight) / 2),
           width: windowWidth,
-          height: windowHeight,
+          height: windowHeight
         });
       }
     };
-
-    ipcMain.handle("set-window-mode", (event: any, mode: "minimal" | "full") => {
+    electron.ipcMain.handle("set-window-mode", (event, mode) => {
       if (!mainWindow) return;
-
       const wasFullMode = !isMinimalMode;
       isMinimalMode = mode === "minimal";
-
       if (isMinimalMode) {
         mainWindow.setResizable(false);
         mainWindow.setMinimumSize(400, 64);
         mainWindow.setMaximumSize(800, 64);
-
         const { screen } = require("electron");
         const primaryDisplay = screen.getPrimaryDisplay();
         const { width, height } = primaryDisplay.workAreaSize;
@@ -437,7 +376,6 @@ const createWindow = () => {
         const targetHeight = 64;
         const targetX = Math.floor((width - targetWidth) / 2);
         const targetY = Math.floor(height * 0.1);
-
         if (wasFullMode) {
           animateWindowResize(
             mainWindow,
@@ -457,12 +395,10 @@ const createWindow = () => {
         const primaryDisplay = screen.getPrimaryDisplay();
         const { width, height } = primaryDisplay.workAreaSize;
         mainWindow.setMaximumSize(width, height);
-
         const targetWidth = 1200;
         const targetHeight = 800;
         const targetX = Math.floor((width - targetWidth) / 2);
         const targetY = Math.floor((height - targetHeight) / 2);
-
         animateWindowResize(
           mainWindow,
           targetWidth,
@@ -471,13 +407,10 @@ const createWindow = () => {
           targetY
         );
       }
-
       mainWindow.webContents.send("window-mode-changed", mode);
     });
-
-    ipcMain.handle("toggle-window-visibility", () => {
+    electron.ipcMain.handle("toggle-window-visibility", () => {
       if (!mainWindow) return;
-
       if (mainWindow.isVisible()) {
         if (!isMinimalMode) {
           wasMinimizedFromFullMode = true;
@@ -490,7 +423,6 @@ const createWindow = () => {
           mainWindow.setResizable(false);
           mainWindow.setMinimumSize(400, 64);
           mainWindow.setMaximumSize(800, 64);
-
           const { screen } = require("electron");
           const primaryDisplay = screen.getPrimaryDisplay();
           const { width, height } = primaryDisplay.workAreaSize;
@@ -498,7 +430,6 @@ const createWindow = () => {
           const targetHeight = 64;
           const targetX = Math.floor((width - targetWidth) / 2);
           const targetY = Math.floor(height * 0.1);
-
           setTimeout(() => {
             if (mainWindow) {
               animateWindowResize(
@@ -510,7 +441,6 @@ const createWindow = () => {
               );
             }
           }, 50);
-
           mainWindow.webContents.send("window-mode-changed", "minimal");
         }
         mainWindow.show();
@@ -518,12 +448,10 @@ const createWindow = () => {
         mainWindow.webContents.send("focus-input");
       }
     });
-
-    ipcMain.handle("get-window-mode", () => {
+    electron.ipcMain.handle("get-window-mode", () => {
       return isMinimalMode ? "minimal" : "full";
     });
-
-    ipcMain.handle("set-window-height", (event: any, height: number) => {
+    electron.ipcMain.handle("set-window-height", (event, height) => {
       if (!mainWindow || !isMinimalMode) return;
       const currentBounds = mainWindow.getBounds();
       mainWindow.setResizable(true);
@@ -536,11 +464,10 @@ const createWindow = () => {
       mainWindow.setBounds({
         ...currentBounds,
         y: targetY,
-        height: height,
+        height
       });
     });
-
-    ipcMain.handle("reset-window-max-height", () => {
+    electron.ipcMain.handle("reset-window-max-height", () => {
       if (!mainWindow || !isMinimalMode) return;
       mainWindow.setMaximumSize(800, 64);
       mainWindow.setResizable(false);
@@ -550,13 +477,11 @@ const createWindow = () => {
     throw error;
   }
 };
-
-function getPreferencesPath(): string {
-  const userDataPath = app.getPath("userData");
+function getPreferencesPath() {
+  const userDataPath = electron.app.getPath("userData");
   return path.join(userDataPath, "preferences.json");
 }
-
-function loadPreferences(): any {
+function loadPreferences() {
   try {
     const prefsPath = getPreferencesPath();
     if (fs.existsSync(prefsPath)) {
@@ -569,11 +494,10 @@ function loadPreferences(): any {
   return {
     ide: "code",
     defaultPort: "3000",
-    projects: [],
+    projects: []
   };
 }
-
-function savePreferences(preferences: any): void {
+function savePreferences(preferences) {
   try {
     const prefsPath = getPreferencesPath();
     fs.writeFileSync(prefsPath, JSON.stringify(preferences, null, 2), "utf-8");
@@ -582,87 +506,75 @@ function savePreferences(preferences: any): void {
     throw error;
   }
 }
-
-async function detectInstalledTerminals(): Promise<string[]> {
-  const terminals: string[] = [];
+async function detectInstalledTerminals() {
+  const terminals = [];
   const { exec } = require("child_process");
   const { promisify } = require("util");
   const execAsync = promisify(exec);
-
   const checks = [
     { name: "wt", command: "where wt.exe", displayName: "Windows Terminal" },
     {
       name: "powershell",
       command: "where powershell.exe",
-      displayName: "PowerShell",
+      displayName: "PowerShell"
     },
     { name: "cmd", command: "where cmd.exe", displayName: "CMD" },
     { name: "git-bash", command: "where git.exe", displayName: "Git Bash" },
-    { name: "wsl", command: "wsl --list --quiet", displayName: "WSL" },
+    { name: "wsl", command: "wsl --list --quiet", displayName: "WSL" }
   ];
-
   for (const check of checks) {
     try {
-      await execAsync(check.command, { shell: "cmd.exe", timeout: 2000 });
+      await execAsync(check.command, { shell: "cmd.exe", timeout: 2e3 });
       terminals.push(check.name);
-    } catch (error) {}
+    } catch (error) {
+    }
   }
-
   return terminals;
 }
-
-ipcMain.handle("get-preferences", () => {
+electron.ipcMain.handle("get-preferences", () => {
   return loadPreferences();
 });
-
-ipcMain.handle("save-preferences", (event: any, preferences: any) => {
+electron.ipcMain.handle("save-preferences", (event, preferences) => {
   savePreferences(preferences);
   return { success: true };
 });
-
-ipcMain.handle("detect-terminals", async () => {
+electron.ipcMain.handle("detect-terminals", async () => {
   return await detectInstalledTerminals();
 });
-
-function startBackendServer(): Promise<void> {
+function startBackendServer() {
   return new Promise((resolve, reject) => {
-    const fs = require("fs");
-    let backendPath: string;
-    let backendIndex: string;
-    let checkedPaths: string[] = [];
-
-    if (app.isPackaged) {
-      const appPath = app.getAppPath();
+    var _a, _b;
+    const fs2 = require("fs");
+    let backendPath;
+    let backendIndex;
+    let checkedPaths = [];
+    if (electron.app.isPackaged) {
+      const appPath = electron.app.getAppPath();
       const resourcesPath = process.resourcesPath || path.dirname(appPath);
       const unpackedPath = appPath.replace("app.asar", "app.asar.unpacked");
-
       checkedPaths = [
         path.join(resourcesPath, "backend"),
         path.join(unpackedPath, "backend"),
         path.join(appPath, "backend"),
-        path.join(path.dirname(appPath), "backend"),
+        path.join(path.dirname(appPath), "backend")
       ];
-
-      backendPath =
-        checkedPaths.find((p) => fs.existsSync(path.join(p, "index.js"))) ||
-        checkedPaths[0];
+      backendPath = checkedPaths.find((p) => fs2.existsSync(path.join(p, "index.js"))) || checkedPaths[0];
       backendIndex = path.join(backendPath, "index.js");
     } else {
       backendPath = path.join(appDir, "../backend");
       backendIndex = path.join(backendPath, "index.js");
     }
-
-    if (!fs.existsSync(backendIndex)) {
+    if (!fs2.existsSync(backendIndex)) {
       console.error(`Backend file not found at: ${backendIndex}`);
       if (checkedPaths.length > 0) {
         console.error(`Checked paths: ${checkedPaths.join(", ")}`);
         checkedPaths.forEach((p) => {
           console.error(
-            `  - ${p}: ${fs.existsSync(p) ? "exists" : "not found"}`
+            `  - ${p}: ${fs2.existsSync(p) ? "exists" : "not found"}`
           );
-          if (fs.existsSync(p)) {
+          if (fs2.existsSync(p)) {
             try {
-              const files = fs.readdirSync(p);
+              const files = fs2.readdirSync(p);
               console.error(`    Files: ${files.join(", ")}`);
             } catch (e) {
               console.error(`    Error reading directory: ${e}`);
@@ -673,119 +585,87 @@ function startBackendServer(): Promise<void> {
       reject(new Error(`Backend file not found at: ${backendIndex}`));
       return;
     }
-
     const nodeModulesPath = path.join(backendPath, "node_modules");
-    const nodePath = process.env.NODE_PATH
-      ? `${process.env.NODE_PATH}${path.delimiter}${nodeModulesPath}`
-      : nodeModulesPath;
-
+    const nodePath = process.env.NODE_PATH ? `${process.env.NODE_PATH}${path.delimiter}${nodeModulesPath}` : nodeModulesPath;
     console.log(`Backend path: ${backendPath}`);
     console.log(`Node modules path: ${nodeModulesPath}`);
-    console.log(`Node modules exists: ${fs.existsSync(nodeModulesPath)}`);
-    
-    if (fs.existsSync(nodeModulesPath)) {
-      const modules = fs.readdirSync(nodeModulesPath);
+    console.log(`Node modules exists: ${fs2.existsSync(nodeModulesPath)}`);
+    if (fs2.existsSync(nodeModulesPath)) {
+      const modules = fs2.readdirSync(nodeModulesPath);
       console.log(`Found ${modules.length} modules in node_modules`);
     } else {
       console.error(`⚠️ WARNING: node_modules not found at ${nodeModulesPath}`);
     }
-
     const electronPath = process.execPath;
     console.log(`Spawning backend with Electron: ${electronPath}`);
     console.log(`Backend script: ${backendIndex}`);
     console.log(`Working directory: ${backendPath}`);
-    
-    backendProcess = spawn(electronPath, [backendIndex], {
+    backendProcess = child_process.spawn(electronPath, [backendIndex], {
       cwd: backendPath,
       stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,
         ELECTRON_RUN_AS_NODE: "1",
-        NODE_ENV:
-          process.env.NODE_ENV ||
-          (app.isPackaged ? "production" : "development"),
+        NODE_ENV: process.env.NODE_ENV || (electron.app.isPackaged ? "production" : "development"),
         NODE_PATH: nodePath,
         NODE_MODULE_PATHS: nodeModulesPath,
         PATH: process.env.PATH,
         PWD: backendPath,
-        NODE_NO_WARNINGS: "1",
-      },
+        NODE_NO_WARNINGS: "1"
+      }
     });
-    
-    // Ensure output streams are not buffered
     if (backendProcess.stdout) {
       backendProcess.stdout.setEncoding("utf8");
     }
     if (backendProcess.stderr) {
       backendProcess.stderr.setEncoding("utf8");
     }
-
     console.log(`Backend process PID: ${backendProcess.pid}`);
     console.log(`Backend process spawned successfully`);
-
     let backendReady = false;
-
-    backendProcess.stdout?.on("data", (data: Buffer | string) => {
+    (_a = backendProcess.stdout) == null ? void 0 : _a.on("data", (data) => {
       const output = typeof data === "string" ? data : data.toString();
       const lines = output.split("\n").filter((line) => line.trim());
-      
       lines.forEach((line) => {
         if (line.trim()) {
           console.log(`[Backend] ${line.trim()}`);
         }
       });
-      
-      if (
-        !backendReady &&
-        (output.includes("server running on") || 
-         output.includes("AI Assistant Backend server running") ||
-         output.includes("listening") ||
-         output.includes("Server is listening") ||
-         output.includes("Server is listening and ready"))
-      ) {
+      if (!backendReady && (output.includes("server running on") || output.includes("AI Assistant Backend server running") || output.includes("listening") || output.includes("Server is listening") || output.includes("Server is listening and ready"))) {
         setTimeout(() => {
-          checkBackendHealth()
-            .then((isReady) => {
-              if (isReady) {
-                backendReady = true;
-                resolve();
-              } else if (!backendReady) {
-                backendReady = true;
-                resolve();
-              }
-            })
-            .catch(() => {
+          checkBackendHealth().then((isReady) => {
+            if (isReady) {
               backendReady = true;
               resolve();
-            });
-        }, 1000);
+            } else if (!backendReady) {
+              backendReady = true;
+              resolve();
+            }
+          }).catch(() => {
+            backendReady = true;
+            resolve();
+          });
+        }, 1e3);
       }
     });
-
-    backendProcess.stderr?.on("data", (data: Buffer | string) => {
+    (_b = backendProcess.stderr) == null ? void 0 : _b.on("data", (data) => {
       const output = typeof data === "string" ? data : data.toString();
       const lines = output.split("\n").filter((line) => line.trim());
-      
       lines.forEach((line) => {
         if (line.trim()) {
           console.error(`[Backend Error] ${line.trim()}`);
         }
       });
-      
-      if (
-        output.includes("Cannot find module") ||
-        output.includes("MODULE_NOT_FOUND") ||
-        output.includes("Error: Cannot find module")
-      ) {
+      if (output.includes("Cannot find module") || output.includes("MODULE_NOT_FOUND") || output.includes("Error: Cannot find module")) {
         console.error(
           "⚠️ Backend dependencies may not be installed or not found."
         );
         console.error(`Backend path: ${backendPath}`);
         console.error(`Node modules path: ${nodeModulesPath}`);
-        console.error(`Node modules exists: ${fs.existsSync(nodeModulesPath)}`);
-        if (fs.existsSync(nodeModulesPath)) {
+        console.error(`Node modules exists: ${fs2.existsSync(nodeModulesPath)}`);
+        if (fs2.existsSync(nodeModulesPath)) {
           try {
-            const modules = fs.readdirSync(nodeModulesPath);
+            const modules = fs2.readdirSync(nodeModulesPath);
             console.error(`Modules found: ${modules.slice(0, 10).join(", ")}...`);
           } catch (e) {
             console.error(`Error reading node_modules: ${e}`);
@@ -796,72 +676,63 @@ function startBackendServer(): Promise<void> {
             if (typeof window !== 'undefined') {
               console.error('[Backend] Missing dependencies detected. Check console for details.');
             }
-          `).catch(() => {});
+          `).catch(() => {
+          });
         }
       }
     });
-
-    backendProcess.on("error", (error: Error) => {
+    backendProcess.on("error", (error) => {
       console.error("=== Backend process error event ===");
       console.error("Failed to start backend server:", error);
       console.error("Error details:", error.message, error.stack);
       console.error("This usually means the script file is missing or cannot be executed.");
       console.error(`Backend script path: ${backendIndex}`);
-      console.error(`Backend script exists: ${fs.existsSync(backendIndex)}`);
-      
+      console.error(`Backend script exists: ${fs2.existsSync(backendIndex)}`);
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.executeJavaScript(`
           if (typeof window !== 'undefined' && window.electronAPI) {
             const errorMsg = 'Backend failed to start: ${error.message.replace(/'/g, "\\'")}\\n\\nPlease check the console for details.';
             alert(errorMsg);
           }
-        `).catch(() => {});
+        `).catch(() => {
+        });
       }
-      
       backendReady = true;
       resolve();
     });
-
-    backendProcess.on("exit", (code: number | null) => {
+    backendProcess.on("exit", (code) => {
       console.error(`Backend process exited with code ${code}`);
-      
-      // If backend exits with code 0, it might have detected an existing server
-      // Check if backend is actually running before assuming failure
       if (code === 0) {
         console.log("Backend exited with code 0 - checking if server is still running...");
         setTimeout(() => {
-          checkBackendHealth()
-            .then((isReady) => {
-              if (isReady) {
-                console.log("✓ Backend server is still running (existing instance)");
-                backendProcess = null;
-                if (!backendReady) {
-                  backendReady = true;
-                  resolve();
-                }
-              } else {
-                console.error("Backend process exited but server is not responding");
-                backendProcess = null;
-                if (!backendReady) {
-                  backendReady = true;
-                  resolve();
-                }
-              }
-            })
-            .catch(() => {
-              console.error("Backend process exited and health check failed");
+          checkBackendHealth().then((isReady) => {
+            if (isReady) {
+              console.log("✓ Backend server is still running (existing instance)");
               backendProcess = null;
               if (!backendReady) {
                 backendReady = true;
                 resolve();
               }
-            });
-        }, 1000);
+            } else {
+              console.error("Backend process exited but server is not responding");
+              backendProcess = null;
+              if (!backendReady) {
+                backendReady = true;
+                resolve();
+              }
+            }
+          }).catch(() => {
+            console.error("Backend process exited and health check failed");
+            backendProcess = null;
+            if (!backendReady) {
+              backendReady = true;
+              resolve();
+            }
+          });
+        }, 1e3);
         return;
       }
-      
       backendProcess = null;
-      
       if (code !== 0 && code !== null) {
         console.error("Backend crashed! Attempting to restart...");
         if (mainWindow && !mainWindow.isDestroyed()) {
@@ -869,7 +740,8 @@ function startBackendServer(): Promise<void> {
             if (typeof window !== 'undefined') {
               console.error('[Backend] Backend crashed with code ${code}. Attempting to restart...');
             }
-          `).catch(() => {});
+          `).catch(() => {
+          });
         }
         setTimeout(() => {
           if (!backendProcess) {
@@ -880,13 +752,13 @@ function startBackendServer(): Promise<void> {
                   if (typeof window !== 'undefined') {
                     alert('Backend restart failed. Please restart the application.');
                   }
-                `).catch(() => {});
+                `).catch(() => {
+                });
               }
             });
           }
-        }, 2000);
+        }, 2e3);
       }
-      
       if (!backendReady) {
         if (code !== null) {
           backendReady = true;
@@ -894,57 +766,50 @@ function startBackendServer(): Promise<void> {
         }
       }
     });
-
     setTimeout(() => {
       if (!backendReady) {
         console.warn("Backend server startup timeout - checking health...");
-        checkBackendHealth()
-          .then((isReady) => {
-            if (isReady) {
-              console.log("✓ Backend is responding to health checks");
-              backendReady = true;
-              resolve();
-            } else {
-              console.warn("Backend not responding to health checks, but resolving anyway");
-              backendReady = true;
-              resolve();
-            }
-          })
-          .catch(() => {
-            console.warn("Health check failed, but resolving anyway");
+        checkBackendHealth().then((isReady) => {
+          if (isReady) {
+            console.log("✓ Backend is responding to health checks");
             backendReady = true;
             resolve();
-          });
+          } else {
+            console.warn("Backend not responding to health checks, but resolving anyway");
+            backendReady = true;
+            resolve();
+          }
+        }).catch(() => {
+          console.warn("Health check failed, but resolving anyway");
+          backendReady = true;
+          resolve();
+        });
       }
-    }, 15000);
+    }, 15e3);
   });
 }
-
-app.whenReady().then(() => {
+electron.app.whenReady().then(() => {
   try {
     createWindow();
   } catch (error) {
     console.error("=== ERROR CREATING WINDOW ===");
     console.error("Error:", error);
     console.error("Stack:", error instanceof Error ? error.stack : "No stack");
-
-    const errorWindow = new BrowserWindow({
+    const errorWindow = new electron.BrowserWindow({
       width: 600,
       height: 400,
-      webPreferences: { nodeIntegration: true },
+      webPreferences: { nodeIntegration: true }
     });
     errorWindow.loadURL(
       `data:text/html,<html><body><h1>Error</h1><pre>${error instanceof Error ? error.message : String(error)}</pre></body></html>`
     );
     errorWindow.show();
   }
-
   startBackendServer().catch((error) => {
     console.error("=== Backend startup failed (non-critical) ===");
     console.error("Error:", error instanceof Error ? error.message : error);
   });
-
-  const ret = globalShortcut.register("Alt+Space", () => {
+  const ret = electron.globalShortcut.register("Alt+Space", () => {
     if (mainWindow) {
       if (mainWindow.isVisible()) {
         if (!isMinimalMode) {
@@ -958,7 +823,6 @@ app.whenReady().then(() => {
           mainWindow.setResizable(false);
           mainWindow.setMinimumSize(400, 64);
           mainWindow.setMaximumSize(800, 64);
-
           const { screen } = require("electron");
           const primaryDisplay = screen.getPrimaryDisplay();
           const { width, height } = primaryDisplay.workAreaSize;
@@ -966,7 +830,6 @@ app.whenReady().then(() => {
           const targetHeight = 64;
           const targetX = Math.floor((width - targetWidth) / 2);
           const targetY = Math.floor(height * 0.1);
-
           setTimeout(() => {
             if (mainWindow) {
               animateWindowResize(
@@ -978,7 +841,6 @@ app.whenReady().then(() => {
               );
             }
           }, 50);
-
           mainWindow.webContents.send("window-mode-changed", "minimal");
         }
         mainWindow.show();
@@ -987,43 +849,36 @@ app.whenReady().then(() => {
       }
     }
   });
-
   if (!ret) {
     console.warn("Failed to register Alt+Space global shortcut");
   }
 });
-
-app.on("will-quit", () => {
-  globalShortcut.unregisterAll();
+electron.app.on("will-quit", () => {
+  electron.globalShortcut.unregisterAll();
 });
-
-app.on("window-all-closed", () => {
+electron.app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     if (backendProcess) {
       backendProcess.kill();
       backendProcess = null;
     }
-    app.quit();
+    electron.app.quit();
   }
 });
-
 process.on("uncaughtException", (error) => {
   console.error("Uncaught exception:", error);
 });
-
 process.on("unhandledRejection", (reason, promise) => {
   console.error("Unhandled rejection at:", promise, "reason:", reason);
 });
-
-app.on("before-quit", () => {
+electron.app.on("before-quit", () => {
   if (backendProcess) {
     backendProcess.kill();
     backendProcess = null;
   }
 });
-
-app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
+electron.app.on("activate", () => {
+  if (electron.BrowserWindow.getAllWindows().length === 0) {
     createWindow();
   }
 });

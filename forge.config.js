@@ -1,5 +1,6 @@
 const { FusesPlugin } = require("@electron-forge/plugin-fuses");
 const { FuseV1Options, FuseVersion } = require("@electron/fuses");
+const { VitePlugin } = require("@electron-forge/plugin-vite");
 const path = require("path");
 const fs = require("fs");
 
@@ -7,16 +8,9 @@ module.exports = {
   packagerConfig: {
     asar: true,
     icon: path.join(__dirname, "src", "assets", "icon"),
+    executableName: "navi",
   },
   hooks: {
-    prePackage: async () => {
-      const { execSync } = require("child_process");
-      execSync("npx tsc -p tsconfig.node.json", {
-        stdio: "inherit",
-        cwd: process.cwd(),
-      });
-      execSync("npm run build", { stdio: "inherit", cwd: process.cwd() });
-    },
     packageAfterExtract: async (
       config,
       buildPath,
@@ -209,6 +203,24 @@ module.exports = {
     },
   ],
   plugins: [
+    new VitePlugin({
+      build: [
+        {
+          entry: "electron/main.ts",
+          config: "vite.main.config.ts",
+        },
+        {
+          entry: "electron/preload.ts",
+          config: "vite.preload.config.ts",
+        },
+      ],
+      renderer: [
+        {
+          name: "main_window",
+          config: "vite.renderer.config.ts",
+        },
+      ],
+    }),
     {
       name: "@electron-forge/plugin-auto-unpack-natives",
       config: {},

@@ -535,7 +535,7 @@ async function findInstalledApps(searchQuery) {
 }
 
 // Helper function to search apps with fuzzy matching (improved algorithm)
-async function searchApps(query, limit = 10) {
+async function searchApps(query, limit = 20) {
   if (!query || query.trim().length === 0) {
     return [];
   }
@@ -547,6 +547,9 @@ async function searchApps(query, limit = 10) {
 
   const queryLower = query.toLowerCase().trim();
   const queryWords = queryLower.split(/\s+/).filter((w) => w.length > 0);
+  
+  // Pre-compute query characters for performance
+  const queryChars = queryLower.split('').filter(c => c !== ' ');
 
   // Score and sort ALL apps (don't pre-filter too aggressively)
   const scoredApps = apps.map((app) => {
@@ -571,24 +574,39 @@ async function searchApps(query, limit = 10) {
       const nameWords = nameLower.split(/\s+/).filter((w) => w.length > 0);
       let wordMatches = 0;
       let wordScore = 0;
+      let initialCharMatches = 0;
 
       for (const qWord of queryWords) {
+        let foundMatch = false;
         // Check if any word in app name starts with query word
         for (const nWord of nameWords) {
           if (nWord.startsWith(qWord)) {
             wordMatches++;
             wordScore += 2000 * (qWord.length / Math.max(nWord.length, 1));
+            foundMatch = true;
             break;
           } else if (nWord.includes(qWord)) {
             wordMatches++;
             wordScore += 1000 * (qWord.length / Math.max(nWord.length, 1));
+            foundMatch = true;
             break;
           } else if (qWord.startsWith(nWord) && nWord.length >= 3) {
             wordMatches++;
             wordScore += 800 * (nWord.length / Math.max(qWord.length, 1));
+            foundMatch = true;
             break;
           }
+          
+          // Check initial character matching (boost for matching first letters of words)
+          if (nWord.length > 0 && nWord[0] === qWord[0]) {
+            initialCharMatches++;
+          }
         }
+      }
+      
+      // Boost score for initial character matches (acronym-like matching)
+      if (initialCharMatches > 0) {
+        wordScore += initialCharMatches * 500;
       }
 
       if (wordMatches > 0) {
@@ -599,11 +617,21 @@ async function searchApps(query, limit = 10) {
           completenessBonus +
           (wordMatches / queryWords.length) * 500;
       }
+      
+      // 4.5. Acronym matching - check if query matches first letters of words
+      if (score < 1000 && queryWords.length === 1 && queryWords[0].length <= 4) {
+        const acronym = nameWords.map(w => w[0]).join('').toLowerCase();
+        if (acronym.startsWith(queryLower) || acronym.includes(queryLower)) {
+          score = Math.max(score, 1500 * (queryLower.length / Math.max(acronym.length, 1)));
+        }
+      }
 
-      // 5. Character sequence matching (for typos/partial matches)
-      if (score === 0 || score < 100) {
+      // 5. Character sequence matching (improved for typos/partial matches)
+      if (score < 200) {
         let sequenceMatches = 0;
         let queryIndex = 0;
+        let consecutiveMatches = 0;
+        let maxConsecutive = 0;
 
         // Check if characters appear in order in the app name
         for (
@@ -613,12 +641,19 @@ async function searchApps(query, limit = 10) {
         ) {
           if (nameLower[i] === queryLower[queryIndex]) {
             sequenceMatches++;
+            consecutiveMatches++;
+            maxConsecutive = Math.max(maxConsecutive, consecutiveMatches);
             queryIndex++;
+          } else {
+            consecutiveMatches = 0;
           }
         }
 
         if (sequenceMatches > 0) {
-          score = (sequenceMatches / queryLower.length) * 300;
+          // Better scoring for sequence matches - reward consecutive matches
+          const baseScore = (sequenceMatches / queryLower.length) * 300;
+          const consecutiveBonus = (maxConsecutive / queryLower.length) * 200;
+          score = Math.max(score, baseScore + consecutiveBonus);
         }
       }
     }
@@ -627,8 +662,9 @@ async function searchApps(query, limit = 10) {
   });
 
   // Sort by score and return top results
+  // Lower threshold to 50 to show more results, but scoring is more lenient now
   const results = scoredApps
-    .filter((app) => app.score > 0)
+    .filter((app) => app.score >= 50)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
     .map((app) => {
@@ -2171,8 +2207,8 @@ app.get("/search-apps", async (req, res) => {
     console.log(`Searching for apps with query: "${query}"`);
 
     const suggestions = await Promise.race([
-      searchApps(query, 10),
-      new Promise((resolve) => setTimeout(() => resolve([]), 500)),
+      searchApps(query, 20),
+      new Promise((resolve) => setTimeout(() => resolve([]), 100)),
     ]);
 
     console.log(`Found ${suggestions.length} suggestions for "${query}"`);

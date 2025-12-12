@@ -1097,6 +1097,14 @@ select.setting-input {
   font-weight: 600;
 }
 
+.suggestion-text mark.highlight-match {
+  background-color: rgba(0, 255, 255, 0.3);
+  color: var(--accent-color);
+  font-weight: 600;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
 .suggestion-hint {
   font-size: 11px;
   color: var(--text-tertiary);

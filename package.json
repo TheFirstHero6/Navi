@@ -5,16 +5,13 @@
   "type": "commonjs",
   "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "build:electron": "tsc -p tsconfig.node.json && npm run build",
+    "dev": "vite --config vite.renderer.config.ts",
+    "build": "vite build --config vite.renderer.config.ts",
     "preview": "vite preview",
-    "electron:dev": "tsc -p tsconfig.node.json && concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
     "check-backend": "node check-backend.js",
-    "electron:build": "npm run build:electron && electron-builder",
-    "start": "electron-forge start",
-    "package": "electron-forge package",
-    "make": "electron-forge make"
+    "start": "npx electron-forge start",
+    "package": "npx electron-forge package",
+    "make": "npx electron-forge make"
   },
   "keywords": [],
   "author": "Klaus Chamberlain",
@@ -36,6 +33,7 @@
     "@electron-forge/maker-zip": "^7.10.2",
     "@electron-forge/plugin-auto-unpack-natives": "^7.10.2",
     "@electron-forge/plugin-fuses": "^7.10.2",
+    "@electron-forge/plugin-vite": "^7.10.2",
     "@electron/fuses": "^1.8.0",
     "@types/node": "^24.10.1",
     "@types/react": "^18.2.6",
@@ -44,46 +42,12 @@
     "@typescript-eslint/parser": "^6.0.0",
     "@vitejs/plugin-react": "^4.2.1",
     "concurrently": "^8.2.2",
-    "electron": "^35.7.5",
+    "electron": "^39.2.6",
     "eslint": "^8.57.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",
-    "typescript": "^5.2.2",
+    "typescript": "^5.9.3",
     "vite": "^6.0.0",
-    "vite-plugin-electron": "^0.15.5",
-    "vite-plugin-electron-renderer": "^0.14.5",
     "wait-on": "^7.2.0"
-  },
-  "build": {
-    "appId": "com.navi.app",
-    "productName": "Navi",
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "dist/**/*",
-      "dist-electron/**/*",
-      "backend/**/*",
-      "src/assets/logo.png"
-    ],
-    "extraResources": [
-      {
-        "from": "backend",
-        "to": "backend",
-        "filter": [
-          "**/*",
-          "!node_modules/.cache/**/*"
-        ]
-      },
-      {
-        "from": "src/assets/logo.png",
-        "to": "src/assets/logo.png"
-      }
-    ],
-    "asar": false,
-    "win": {
-      "target": "nsis",
-      "icon": "src/assets/logo.png"
-    }
   }
 }

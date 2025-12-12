@@ -84,6 +84,74 @@ const fetchWithTimeout = async (
   }
 };
 
+// Helper function to highlight matching text in suggestions
+const highlightMatch = (text: string, query: string): React.ReactNode => {
+  if (!query || !text) return text;
+  
+  const queryLower = query.toLowerCase().trim();
+  const textLower = text.toLowerCase();
+  
+  // Try exact substring match first (most common case)
+  const exactIndex = textLower.indexOf(queryLower);
+  if (exactIndex !== -1) {
+    const parts: React.ReactNode[] = [];
+    if (exactIndex > 0) {
+      parts.push(text.substring(0, exactIndex));
+    }
+    parts.push(
+      <mark key="match" className="highlight-match">
+        {text.substring(exactIndex, exactIndex + query.length)}
+      </mark>
+    );
+    if (exactIndex + query.length < text.length) {
+      parts.push(text.substring(exactIndex + query.length));
+    }
+    return <>{parts}</>;
+  }
+  
+  // Try word-based matching - highlight words that contain query
+  const queryWords = queryLower.split(/\s+/).filter(w => w.length > 0);
+  if (queryWords.length === 0) return text;
+  
+  const textWords = text.split(/(\s+)/); // Split but keep spaces
+  const result: React.ReactNode[] = [];
+  
+  for (let i = 0; i < textWords.length; i++) {
+    const segment = textWords[i];
+    if (!segment.trim()) {
+      // Preserve spaces
+      result.push(segment);
+      continue;
+    }
+    
+    const segmentLower = segment.toLowerCase();
+    let matched = false;
+    
+    for (const qWord of queryWords) {
+      if (segmentLower.includes(qWord)) {
+        const matchIndex = segmentLower.indexOf(qWord);
+        if (matchIndex !== -1) {
+          result.push(segment.substring(0, matchIndex));
+          result.push(
+            <mark key={`${i}-${matchIndex}`} className="highlight-match">
+              {segment.substring(matchIndex, matchIndex + qWord.length)}
+            </mark>
+          );
+          result.push(segment.substring(matchIndex + qWord.length));
+          matched = true;
+          break;
+        }
+      }
+    }
+    
+    if (!matched) {
+      result.push(segment);
+    }
+  }
+  
+  return result.length > 0 ? <>{result}</> : text;
+};
+
 const App = () => {
   const [prompt, setPrompt] = useState("");
   const [output, setOutput] = useState("");
@@ -114,6 +182,9 @@ const App = () => {
     projects: [],
   });
   const [, setPreferencesLoaded] = useState(false);
+  const [cachedRunningApps, setCachedRunningApps] = useState<any[]>([]);
+  const runningAppsCacheTime = useRef<number>(0);
+  const isExecutingRef = useRef<boolean>(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -238,6 +309,8 @@ const App = () => {
       }
 
       if (
+        lower === "sw" ||
+        lower.startsWith("sw ") ||
         lower === "switch" ||
         lower.startsWith("switch ") ||
         lower === "focus" ||
@@ -245,7 +318,7 @@ const App = () => {
       ) {
         return {
           type: "switch",
-          value: trimmed.replace(/^(switch|focus)\s*/i, "").trim(),
+          value: trimmed.replace(/^(sw|switch|focus)\s*/i, "").trim(),
           confidence: 1.0,
         };
       }
@@ -313,24 +386,6 @@ const App = () => {
         };
       }
 
-      if (
-        trimmed.length > 3 &&
-        !lower.startsWith("open ") &&
-        !lower.startsWith("launch ") &&
-        !lower.startsWith("start ")
-      ) {
-        // Check if it might be an app name (short, no spaces, or common app patterns)
-        const mightBeApp =
-          trimmed.length < 20 && trimmed.split(/\s+/).length <= 2;
-        if (!mightBeApp) {
-          return {
-            type: "search",
-            value: trimmed,
-            confidence: 0.7,
-          };
-        }
-      }
-
       // Default to app search if it starts with open/launch/start
       if (
         lower.startsWith("open ") ||
@@ -347,8 +402,22 @@ const App = () => {
         }
       }
 
-      // If short and no clear pattern, assume app search
-      if (trimmed.length < 30 && trimmed.split(/\s+/).length <= 3) {
+      // Prioritize app search for most queries
+      // Only classify as web search for very long queries or explicit search patterns
+      const isLongQuery = trimmed.length > 50;
+      const hasSearchKeywords = /\b(search|find|lookup|google|bing)\b/i.test(trimmed);
+      
+      if (isLongQuery && hasSearchKeywords) {
+        return {
+          type: "search",
+          value: trimmed,
+          confidence: 0.7,
+        };
+      }
+
+      // Default to app search for short-medium queries
+      // This allows app suggestions to show for most inputs
+      if (trimmed.length <= 50) {
         return {
           type: "app",
           value: trimmed,
@@ -356,11 +425,11 @@ const App = () => {
         };
       }
 
-      // Default to search for longer queries
+      // For very long queries without search keywords, still default to app but with lower confidence
       return {
-        type: "search",
+        type: "app",
         value: trimmed,
-        confidence: 0.5,
+        confidence: 0.4,
       };
     },
     []
@@ -449,6 +518,11 @@ const App = () => {
   ];
 
   useEffect(() => {
+    // Don't run if we're executing a command
+    if (isExecutingRef.current) {
+      return;
+    }
+
     if (!prompt.trim()) {
       setSuggestions([]);
       setShowSuggestions(false);
@@ -519,71 +593,91 @@ const App = () => {
 
     if (intent.type === "switch") {
       const searchTerm = intent.value.toLowerCase().trim();
-      const timeoutId = setTimeout(async () => {
-        try {
-          const response = await fetch("http://localhost:3000/running-apps");
-          const data = await response.json();
+      
+      // Use cached apps if available and fresh (less than 2 seconds old)
+      const useCache = cachedRunningApps.length > 0 && (Date.now() - runningAppsCacheTime.current < 2000);
+      
+      const filterAndDisplayApps = (apps: any[]) => {
+        let filteredApps = apps;
+        if (searchTerm) {
+          filteredApps = apps.filter((app: any) =>
+            app.name.toLowerCase().includes(searchTerm)
+          );
+        }
 
-          if (data.success && data.apps && data.apps.length > 0) {
-            let filteredApps = data.apps;
-            if (searchTerm) {
-              filteredApps = data.apps.filter((app: any) =>
-                app.name.toLowerCase().includes(searchTerm)
-              );
-            }
+        // Sort by relevance (exact matches first, then partial matches)
+        if (searchTerm) {
+          filteredApps.sort((a: any, b: any) => {
+            const aName = a.name.toLowerCase();
+            const bName = b.name.toLowerCase();
 
-            // Sort by relevance (exact matches first, then partial matches)
-            if (searchTerm) {
-              filteredApps.sort((a: any, b: any) => {
-                const aName = a.name.toLowerCase();
-                const bName = b.name.toLowerCase();
+            // Exact match gets highest priority
+            if (aName === searchTerm) return -1;
+            if (bName === searchTerm) return 1;
 
-                // Exact match gets highest priority
-                if (aName === searchTerm) return -1;
-                if (bName === searchTerm) return 1;
+            // Starts with search term gets next priority
+            if (aName.startsWith(searchTerm)) return -1;
+            if (bName.startsWith(searchTerm)) return 1;
 
-                // Starts with search term gets next priority
-                if (aName.startsWith(searchTerm)) return -1;
-                if (bName.startsWith(searchTerm)) return 1;
+            // Otherwise alphabetical
+            return aName.localeCompare(bName);
+          });
+        } else {
+          // When no search term, just sort alphabetically
+          filteredApps.sort((a: any, b: any) => {
+            return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+          });
+        }
 
-                // Otherwise alphabetical
-                return aName.localeCompare(bName);
-              });
-            } else {
-              // When no search term, just sort alphabetically
-              filteredApps.sort((a: any, b: any) => {
-                return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
-              });
-            }
+        if (filteredApps.length > 0) {
+          // Format suggestions as "Switch to x" where x is the app name
+          const switchSuggestions: Suggestion[] = filteredApps.map(
+            (app: any) => ({
+              name: `Switch to ${app.name}`,
+              path: app.name, // Store the actual app name in path for execution
+              score: 1.0,
+            })
+          );
+          setSuggestions(switchSuggestions);
+          setShowSuggestions(true);
+          setSelectedSuggestionIndex(0);
+        } else {
+          setSuggestions([]);
+          setShowSuggestions(false);
+        }
+      };
 
-            if (filteredApps.length > 0) {
-              // Format suggestions as "Switch to x" where x is the app name
-              const switchSuggestions: Suggestion[] = filteredApps.map(
-                (app: any) => ({
-                  name: `Switch to ${app.name}`,
-                  path: app.name, // Store the actual app name in path for execution
-                  score: 1.0,
-                })
-              );
-              setSuggestions(switchSuggestions);
-              setShowSuggestions(true);
-              setSelectedSuggestionIndex(0);
+      if (useCache) {
+        // Filter cached apps immediately - no delay
+        filterAndDisplayApps(cachedRunningApps);
+      } else {
+        // Fetch immediately for faster detection
+        (async () => {
+          try {
+            const response = await fetch("http://localhost:3000/running-apps");
+            const data = await response.json();
+
+            if (data.success && data.apps && data.apps.length > 0) {
+              // Cache the apps
+              setCachedRunningApps(data.apps);
+              runningAppsCacheTime.current = Date.now();
+              
+              // Filter and display
+              filterAndDisplayApps(data.apps);
             } else {
               setSuggestions([]);
               setShowSuggestions(false);
             }
-          } else {
+          } catch (error) {
+            console.error("Error fetching running apps:", error);
             setSuggestions([]);
             setShowSuggestions(false);
           }
-        } catch (error) {
-          console.error("Error fetching running apps:", error);
-          setSuggestions([]);
-          setShowSuggestions(false);
-        }
-      }, 50);
-
-      return () => clearTimeout(timeoutId);
+        })();
+      }
+      
+      // Early return to prevent general app search from running
+      return;
     }
 
     if (intent.type === "recent") {
@@ -651,19 +745,21 @@ const App = () => {
         searchTermLower.includes(cmd.name.toLowerCase())
     );
 
-    if (intent.type !== "app" && !matchesSystemCommand) {
+    // Only block app suggestions for high-confidence non-app intents (URL, path, calculation)
+    // Allow app suggestions for everything else (including search, unknown, etc.)
+    const shouldBlockAppSuggestions = 
+      (intent.type === "url" && intent.confidence >= 0.9) ||
+      (intent.type === "path" && intent.confidence >= 0.9) ||
+      (intent.type === "calculate" && intent.confidence >= 0.85);
+
+    if (shouldBlockAppSuggestions && !matchesSystemCommand) {
       setSuggestions([]);
       setShowSuggestions(false);
       return;
     }
 
+    // Use the prompt directly for app search, or extract app name from intent
     const appName = intent.type === "app" ? intent.value : prompt.trim();
-
-    if (appName.length < 1) {
-      setSuggestions([]);
-      setShowSuggestions(false);
-      return;
-    }
 
     const filteredSystemCommands = systemCommands.filter(
       (cmd) =>
@@ -726,7 +822,7 @@ const App = () => {
           setShowSuggestions(false);
         }
       }
-    }, 50);
+    }, 15);
 
     return () => clearTimeout(timeoutId);
   }, [prompt, detectIntent]);
@@ -839,10 +935,15 @@ const App = () => {
           selected.name.startsWith("Switch to ")
         ) {
           const appName = selected.path; // The actual app name is stored in path
+          // Hide suggestions and window immediately
+          setShowSuggestions(false);
+          setSuggestions([]);
+          setPrompt("");
+          if (windowMode === "minimal" && window.electronAPI?.toggleWindowVisibility) {
+            // Hide window immediately
+            window.electronAPI.toggleWindowVisibility();
+          }
           try {
-            setPrompt("");
-            setShowSuggestions(false);
-            setSuggestions([]);
             setIsLoading(true);
             setOutput(`Switching to ${appName}...`);
 
@@ -858,13 +959,6 @@ const App = () => {
 
             if (data.success) {
               setOutput(data.message || `Switched to ${appName}`);
-              if (windowMode === "minimal") {
-                setTimeout(() => {
-                  if (window.electronAPI?.toggleWindowVisibility) {
-                    window.electronAPI.toggleWindowVisibility();
-                  }
-                }, 500);
-              }
             } else {
               setOutput(data.error || `Failed to switch to ${appName}`);
             }
@@ -872,6 +966,9 @@ const App = () => {
             setOutput(`Error: ${error.message}`);
           } finally {
             setIsLoading(false);
+            setTimeout(() => {
+              isExecutingRef.current = false;
+            }, 100);
           }
           return;
         }
@@ -1019,6 +1116,8 @@ const App = () => {
       const currentPrompt = prompt;
       const intent = detectIntent(currentPrompt);
 
+      // Set executing flag to prevent useEffect from running
+      isExecutingRef.current = true;
       setPrompt("");
       setShowSuggestions(false);
       setSuggestions([]);
@@ -1071,6 +1170,10 @@ const App = () => {
 
           case "switch":
             if (intent.value) {
+              // Hide window immediately for switch command
+              if (windowMode === "minimal" && window.electronAPI?.toggleWindowVisibility) {
+                window.electronAPI.toggleWindowVisibility();
+              }
               endpoint = "/focus-app";
               requestBody = { appName: intent.value };
             } else {
@@ -1220,10 +1323,9 @@ const App = () => {
             }, 500);
           }
 
-          // Hide window after quit, switch, or url command
+          // Hide window after quit or url command (switch is already hidden above)
           if (
             (intent.type === "quit" ||
-              intent.type === "switch" ||
               intent.type === "url") &&
             windowMode === "minimal"
           ) {
@@ -1261,6 +1363,10 @@ const App = () => {
         console.error("Backend connection error:", error);
       } finally {
         setIsLoading(false);
+        // Reset executing flag after a short delay to allow window to hide
+        setTimeout(() => {
+          isExecutingRef.current = false;
+        }, 100);
       }
     },
     [
@@ -1348,11 +1454,14 @@ const App = () => {
           return;
         } else if (e.key === "Enter") {
           e.preventDefault();
-          if (
-            selectedSuggestionIndex >= 0 &&
-            selectedSuggestionIndex < suggestions.length
-          ) {
-            handleExecute(suggestions[selectedSuggestionIndex]);
+          // Hide suggestions immediately to prevent flickering
+          const selected = selectedSuggestionIndex >= 0 && selectedSuggestionIndex < suggestions.length
+            ? suggestions[selectedSuggestionIndex]
+            : null;
+          setShowSuggestions(false);
+          setSuggestions([]);
+          if (selected) {
+            handleExecute(selected);
           } else {
             handleExecute();
           }
@@ -1668,7 +1777,7 @@ const App = () => {
                         }`}
                         title={suggestion.path || suggestion.name}
                       >
-                        {suggestion.name}
+                        {highlightMatch(suggestion.name, prompt.trim())}
                       </span>
                       {index === selectedSuggestionIndex && (
                         <span className="suggestion-hint">Press Enter</span>
